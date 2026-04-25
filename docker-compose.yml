@@ -1,0 +1,179 @@
+# CostGuard v17.0 - Docker Compose
+# Default stack: postgres + opa + backend + dashboard
+# Optional profiles:
+#   full    -> prometheus + grafana
+#   postrun -> postrun-importer
+
+networks:
+  costguard-net:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: costguard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-costguard}
+      POSTGRES_USER: ${DB_USER:-tejuska_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-CHANGE_ME_DB_PASSWORD}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - costguard-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tejuska_user} -d ${DB_NAME:-costguard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  opa:
+    image: openpolicyagent/opa:0.65.0
+    container_name: costguard-opa
+    restart: unless-stopped
+    ports:
+      - "8181:8181"
+    command: run --server --addr :8181 /policies
+    volumes:
+      - ./policies:/policies:ro
+    networks:
+      - costguard-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: costguard-backend
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: local
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-costguard}
+      DB_USER: ${DB_USER:-tejuska_user}
+      DB_PASSWORD: ${DB_PASSWORD:-CHANGE_ME_DB_PASSWORD}
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_BASE_URL: http://backend:8000
+      OPA_URL: http://opa:8181/v1/data/costguard/result
+      OPA_POSTRUN_URL: http://opa:8181/v1/data/costguard/postrun_result
+      PADE_DATA_MODE: ${PADE_DATA_MODE:-synthetic}
+      POSTRUN_RESULTS_ROOT: /app/results
+      ALLOWED_ORIGINS: '["http://localhost:8501","http://127.0.0.1:8501","http://localhost:3000"]'
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES:-60}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-1000}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_DEFAULT_CHANNEL: ${SLACK_DEFAULT_CHANNEL:-#costguard-alerts}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-100}
+      KAFKA_ENABLED: ${KAFKA_ENABLED:-false}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./results:/app/results:ro
+      - ./policies:/app/policies:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opa:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - costguard-net
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: costguard-dashboard
+    restart: unless-stopped
+    environment:
+      COSTGUARD_API_BASE_URL: http://backend:8000
+      DASHBOARD_BASE_URL: http://localhost:8501
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8501/_stcore/health > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - costguard-net
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: costguard-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    networks:
+      - costguard-net
+    profiles:
+      - full
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: costguard-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-CHANGE_ME_GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - costguard-net
+    profiles:
+      - full
+
+  postrun-importer:
+    image: python:3.12-slim
+    container_name: costguard-postrun-importer
+    working_dir: /workspace
+    command: >
+      sh -lc "python scripts/import_ieee_results.py --apply"
+    environment:
+      PYTHONPATH: /workspace/backend
+      POSTRUN_RESULTS_ROOT: /workspace/results
+    volumes:
+      - ./:/workspace:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - costguard-net
+    profiles:
+      - postrun
+
+volumes:
+  pgdata:
+  promdata:
+  grafanadata:

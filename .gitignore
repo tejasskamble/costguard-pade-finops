@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc.*
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env_backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+coverage.xml
+coverage_html/
+*.log
+logs/
+runs/
+checkpoints/
+*.tmp
+*.orig
+*.bak
+
+# Environment & Secrets
+.env
+!.env.example
+
+# Docker volumes (never commit data)
+pgdata/
+promdata/
+grafanadata/
+
+# Model checkpoints (too large for git — use DVC or S3)
+backend/pade/checkpoints/*.pt
+!backend/pade/checkpoints/.gitkeep
+
+# Temp files created by costguard_start.py
+backend/_req_base_tmp.txt
+training_terminal_logs.md
+.freeze_files.list
+.freeze_ts.txt
+freeze_manifest.sha256
+phase1_check_status*.json
+phase2_validation_status*.json
+
+# Large runtime datasets/results (keep code, keep small summaries only)
+final-2017-01-25.csv
+fastStorage/
+backend/pade/training_workspace/
+.pytest_tmp/
+results/trials/
+results/final_outputs/
+results/*
+!results/aggregate/
+results/aggregate/*
+!results/aggregate/ieee_aggregate_summary.csv
+!results/aggregate/ieee_aggregate_summary.json
+!results/aggregate/ieee_per_seed_summary.csv
+!results/aggregate/ieee_per_seed_summary.json
+!results/paper_figures/
+results/paper_figures/*
+!results/paper_figures/ieee_f1_comparison.eps
+!results/paper_figures/ieee_bwt_summary.eps
+!results/paper_figures/ieee_bwt_summary.pdf
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (if any frontend tooling added)
+node_modules/

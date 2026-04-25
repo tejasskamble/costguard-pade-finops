@@ -1,0 +1,335 @@
+name: CostGuard CI/CD
+
+on:
+  push:
+    branches: [main, dev, staging, 'feature/*', 'hotfix/*']
+  pull_request:
+    branches: [main, dev, staging]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.11'
+  POSTGRES_PORT: 5433
+
+jobs:
+  lint:
+    name: Lint and Static Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install lint tools
+        run: pip install black flake8 isort mypy
+
+      - name: Check formatting
+        run: black --check --line-length 100 backend/ tests/ || echo '::warning::Formatting drift detected.'
+
+      - name: Check import ordering
+        run: isort --check-only --profile black backend/ tests/ || true
+
+      - name: Flake8 linting
+        run: |
+          flake8 backend/ tests/ \
+            --max-line-length=120 \
+            --extend-ignore=E501,W503,E203 \
+            --exclude=backend/pade/trainer.py,backend/pade/checkpoints
+
+      - name: Validate compose file safety
+        run: |
+          if grep -q '^version:' docker-compose.yml; then
+            echo "::error::Obsolete 'version:' key found in docker-compose.yml"
+            exit 1
+          fi
+          if grep -q 'docker-entrypoint-initdb.d' docker-compose.yml; then
+            echo '::error::Dangerous initdb.d bind mount found in docker-compose.yml'
+            exit 1
+          fi
+          echo 'docker-compose.yml safety checks passed'
+
+      - name: Python syntax checks
+        run: |
+          python -m py_compile \
+            CostGuard_PADE_FULL.py \
+            costguard_analytics.py \
+            aggregate_results.py \
+            generate_paper_figures.py \
+            backend/main.py
+
+      - name: Runner shell syntax
+        run: bash -n run_ieee_trials.sh
+
+  unit-tests:
+    name: Backend and Policy Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies (without heavy torch stack)
+        run: |
+          pip install --upgrade pip
+          grep -v 'torch' backend/requirements.txt | grep -v '^#' | pip install -r /dev/stdin
+          pip install pytest pytest-asyncio pytest-cov pyyaml httpx matplotlib
+
+      - name: Set PYTHONPATH
+        run: echo "PYTHONPATH=$GITHUB_WORKSPACE/backend" >> $GITHUB_ENV
+
+      - name: Create test environment
+        run: |
+          cat > .env << 'EOF'
+          DB_HOST=localhost
+          DB_PORT=5433
+          DB_NAME=costguard
+          DB_USER=tejuska_user
+          DB_PASSWORD=StrongPassword123!
+          JWT_SECRET=ci-test-secret-key-not-for-production
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRY_MINUTES=60
+          API_PORT=7860
+          EOF
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=short \
+            --no-header \
+            -p no:warnings \
+            --ignore=tests/test_integration.py \
+            --cov=backend \
+            --cov-report=xml \
+            --cov-report=term-missing
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          fail_ci_if_error: false
+
+  ml-smoke:
+    name: Canonical ML Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install canonical ML dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install scipy scikit-learn matplotlib
+
+      - name: Run canonical smoke test
+        run: python CostGuard_PADE_FULL.py --smoke-test
+
+      - name: Aggregate wrapper sanity check
+        run: python aggregate_results.py --latex --csv
+
+  docker-health:
+    name: Docker Compose Health Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose file syntax
+        run: docker compose config --quiet
+
+      - name: Start only PostgreSQL
+        run: docker compose up -d --wait postgres
+        timeout-minutes: 3
+
+      - name: Verify Postgres accepts connections
+        run: |
+          for i in $(seq 1 10); do
+            if docker exec costguard-postgres pg_isready -U tejuska_user -d costguard; then
+              echo 'PostgreSQL is ready'
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'PostgreSQL did not become ready in time'
+          docker logs costguard-postgres
+          exit 1
+
+      - name: Verify mapped port
+        run: |
+          nc -z localhost 5433 && echo 'Port 5433 is accessible' || (echo 'Port 5433 not accessible'; exit 1)
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
+
+  integration-tests:
+    name: Integration Tests (Real DB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [unit-tests, docker-health]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: costguard
+          POSTGRES_USER: tejuska_user
+          POSTGRES_PASSWORD: StrongPassword123!
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd="pg_isready -U tejuska_user -d costguard"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          grep -v 'torch' backend/requirements.txt | grep -v '^#' | pip install -r /dev/stdin
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Set environment
+        run: |
+          echo "PYTHONPATH=$GITHUB_WORKSPACE/backend" >> $GITHUB_ENV
+          cat > .env << 'EOF'
+          DB_HOST=localhost
+          DB_PORT=5433
+          DB_NAME=costguard
+          DB_USER=tejuska_user
+          DB_PASSWORD=StrongPassword123!
+          JWT_SECRET=ci-integration-secret
+          JWT_ALGORITHM=HS256
+          JWT_EXPIRY_MINUTES=60
+          API_PORT=7860
+          EOF
+
+      - name: Run migrations
+        run: |
+          python - << 'PY'
+          import asyncio
+          import asyncpg
+
+          async def run():
+              pool = await asyncpg.create_pool('postgresql://tejuska_user:StrongPassword123!@localhost:5433/costguard')
+              for migration in [
+                  'migrations/001_init_focus_schema.sql',
+                  'migrations/002_add_notify_trigger.sql',
+                  'migrations/003_add_query_history.sql',
+                  'migrations/004_new_features.sql',
+                  'migrations/005_policy_governance.sql',
+              ]:
+                  sql = open(migration, encoding='utf-8').read()
+                  async with pool.acquire() as conn:
+                      await conn.execute(sql)
+                  print(f'Applied {migration}')
+              await pool.close()
+
+          asyncio.run(run())
+          PY
+
+      - name: Run integration tests
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=long \
+            -m integration \
+            --no-header \
+            --cov=backend \
+            --cov-report=xml
+
+  security-scan:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit dependencies
+        run: |
+          pip-audit \
+            --requirement backend/requirements.txt \
+            --ignore-vuln PYSEC-2022-42969 \
+            --output json \
+            --format json > audit.json || true
+          pip-audit \
+            --requirement backend/requirements.txt \
+            --ignore-vuln PYSEC-2022-42969 || echo '::warning::Security vulnerabilities found - review audit.json'
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-audit
+          path: audit.json
+
+  deploy-gate:
+    name: Deploy Gate
+    runs-on: ubuntu-latest
+    needs: [unit-tests, ml-smoke, docker-health, security-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: http://localhost:8501
+
+    steps:
+      - name: All checks passed
+        run: |
+          echo 'Lint passed'
+          echo 'Unit tests passed'
+          echo 'ML smoke test passed'
+          echo 'Docker health check passed'
+          echo 'Security scan completed'
+          echo ''
+          echo 'CostGuard v17.0 is ready to deploy.'
+          echo 'Commit: ${{ github.sha }}'
+          echo 'Branch: ${{ github.ref_name }}'
+          echo 'Triggered by: ${{ github.actor }}'

@@ -1,0 +1,31 @@
+# Python / local env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Large or local-only data/artifacts (mounted at runtime when needed)
+results/
+Backup/
+fastStorage/
+raw_alibaba/
+raw_bitbrains/
+raw_universal_Bitbrains/
+ml_ready_*/
+_workspace/
+*.zip
+*.gz
+*.pt
+*.npy
+
+# Local logs and temp files
+logs/
+*.log
+training_terminal_logs.md
+
+# VCS / editor
+.git/
+.gitignore
+.vscode/
+.idea/
+
