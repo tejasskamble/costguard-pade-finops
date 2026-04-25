@@ -146,7 +146,7 @@ def _render_forecast(forecast_data: dict) -> None:
     fc_upper   = [f["upper"] for f in fc]
 
     # Bridge: connect last historical point to first forecast
-    if hist_dates and fc_dates:
+    if hist_dates and fc_dates and False:
         bridge_date = hist_dates[-1:]
         bridge_cost = hist_costs[-1:]
     else:
@@ -191,24 +191,44 @@ def _render_forecast(forecast_data: dict) -> None:
         hovertemplate="<b>%{x}</b><br>Forecast: $%{y:.4f}<extra></extra>",
     ))
 
+    forecast_layout = dict(PLOTLY_LAYOUT)
+    forecast_layout["yaxis"] = dict(**PLOTLY_LAYOUT["yaxis"], tickprefix="$")
+    forecast_layout["legend"] = dict(**PLOTLY_LAYOUT["legend"], orientation="h", x=0, y=1.12)
+    forecast_layout["height"] = 320
     fig.update_layout(
-        **PLOTLY_LAYOUT,
+        **forecast_layout,
         title_text="Cost Forecast — Holt-Winters ETS + 80% Confidence Band",
-        yaxis=dict(**PLOTLY_LAYOUT["yaxis"], tickprefix="$"),
-        legend=dict(
-            **PLOTLY_LAYOUT["legend"],
-            orientation="h", x=0, y=1.12,
-        ),
-        height=320,
     )
     # Vertical divider between historical and forecast
-    if hist_dates and fc_dates:
+    if hist_dates and fc_dates and False:
         fig.add_vline(
             x=hist_dates[-1], line_dash="dot",
             line_color="rgba(99,102,241,0.4)", line_width=1,
             annotation_text="Forecast →",
             annotation_font_color="#6366F1",
             annotation_position="top right",
+        )
+    if hist_dates and fc_dates:
+        fig.add_shape(
+            type="line",
+            x0=hist_dates[-1],
+            x1=hist_dates[-1],
+            y0=0,
+            y1=1,
+            xref="x",
+            yref="paper",
+            line=dict(dash="dot", color="rgba(99,102,241,0.4)", width=1),
+        )
+        fig.add_annotation(
+            x=hist_dates[-1],
+            y=1,
+            xref="x",
+            yref="paper",
+            text="Forecast ->",
+            showarrow=False,
+            font=dict(color="#6366F1"),
+            xanchor="left",
+            yanchor="bottom",
         )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
@@ -228,8 +248,11 @@ def _render_trend(df: pd.DataFrame, is_demo: bool) -> None:
         name="Daily Cost",
         hovertemplate="<b>%{x}</b><br>$%{y:.4f}<extra></extra>",
     ))
-    fig.update_layout(**PLOTLY_LAYOUT, title_text="Daily Pipeline Spend (Last 30 Days)",
-                      yaxis=dict(**PLOTLY_LAYOUT["yaxis"], tickprefix="$"), showlegend=False)
+    trend_layout = dict(PLOTLY_LAYOUT)
+    trend_layout["title_text"] = "Daily Pipeline Spend (Last 30 Days)"
+    trend_layout["yaxis"] = dict(**PLOTLY_LAYOUT["yaxis"], tickprefix="$")
+    trend_layout["showlegend"] = False
+    fig.update_layout(**trend_layout)
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
@@ -247,9 +270,12 @@ def _render_stage_bar(df: pd.DataFrame, is_demo: bool) -> None:
         textfont=dict(color="rgba(255,255,255,0.7)", size=10),
         hovertemplate="<b>%{y}</b><br>$%{x:.4f}<extra></extra>",
     ))
-    fig.update_layout(**PLOTLY_LAYOUT, title_text="Billed Cost per Stage",
-                      xaxis=dict(**PLOTLY_LAYOUT["xaxis"], tickprefix="$"),
-                      showlegend=False, height=340)
+    stage_layout = dict(PLOTLY_LAYOUT)
+    stage_layout["title_text"] = "Billed Cost per Stage"
+    stage_layout["xaxis"] = dict(**PLOTLY_LAYOUT["xaxis"], tickprefix="$")
+    stage_layout["showlegend"] = False
+    stage_layout["height"] = 340
+    fig.update_layout(**stage_layout)
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
