@@ -665,6 +665,11 @@ def get_pipeline_runs(page: int = 1, limit: int = 50, filters: Optional[Dict] = 
 
 # -- Post-run integration ------------------------------------------------------
 
+def _as_dict_payload(data: Optional[Any]) -> Dict[str, Any]:
+    if isinstance(data, dict):
+        return data
+    return {}
+
 def get_postrun_summary(
     results_root: Optional[str] = None,
     min_ensemble_f1: float = 0.80,
@@ -674,7 +679,7 @@ def get_postrun_summary(
         from urllib.parse import quote
 
         query += f"&results_root={quote(results_root)}"
-    return safe_request("GET", f"{API_BASE}/postrun/summary{query}")
+    return _as_dict_payload(safe_request("GET", f"{API_BASE}/postrun/summary{query}"))
 
 
 def run_postrun_import(
@@ -691,19 +696,23 @@ def run_postrun_import(
     }
     if results_root:
         payload["results_root"] = results_root
-    return safe_request("POST", f"{API_BASE}/postrun/import", json=payload)
+    return _as_dict_payload(safe_request("POST", f"{API_BASE}/postrun/import", json=payload))
 
 
 def get_postrun_import_history(limit: int = 25) -> Optional[Dict]:
-    return safe_request("GET", f"{API_BASE}/postrun/import/history?limit={limit}", show_errors=False)
+    return _as_dict_payload(
+        safe_request("GET", f"{API_BASE}/postrun/import/history?limit={limit}", show_errors=False)
+    )
 
 
 def get_postrun_model_registry(results_root: Optional[str] = None) -> Optional[Dict]:
     if results_root:
         from urllib.parse import quote
 
-        return safe_request("GET", f"{API_BASE}/postrun/models?results_root={quote(results_root)}", show_errors=False)
-    return safe_request("GET", f"{API_BASE}/postrun/models", show_errors=False)
+        return _as_dict_payload(
+            safe_request("GET", f"{API_BASE}/postrun/models?results_root={quote(results_root)}", show_errors=False)
+        )
+    return _as_dict_payload(safe_request("GET", f"{API_BASE}/postrun/models", show_errors=False))
 
 
 def get_postrun_seed_metrics(
@@ -711,10 +720,12 @@ def get_postrun_seed_metrics(
     model_name: str = "ens",
     metric_scope: str = "test",
 ) -> Optional[Dict]:
-    return safe_request(
-        "GET",
-        f"{API_BASE}/postrun/graphs/seed-metrics?metric_name={metric_name}&model_name={model_name}&metric_scope={metric_scope}",
-        show_errors=False,
+    return _as_dict_payload(
+        safe_request(
+            "GET",
+            f"{API_BASE}/postrun/graphs/seed-metrics?metric_name={metric_name}&model_name={model_name}&metric_scope={metric_scope}",
+            show_errors=False,
+        )
     )
 
 
@@ -726,7 +737,7 @@ def get_postrun_domain_metrics(
     query = f"{API_BASE}/postrun/graphs/domain-metrics?metric_name={metric_name}&metric_scope={metric_scope}"
     if model_name:
         query += f"&model_name={model_name}"
-    return safe_request("GET", query, show_errors=False)
+    return _as_dict_payload(safe_request("GET", query, show_errors=False))
 
 
 def get_postrun_anomaly_counts(
@@ -736,20 +747,24 @@ def get_postrun_anomaly_counts(
     query = f"{API_BASE}/postrun/graphs/anomaly-counts?split_name={split_name}"
     if model_name:
         query += f"&model_name={model_name}"
-    return safe_request("GET", query, show_errors=False)
+    return _as_dict_payload(safe_request("GET", query, show_errors=False))
 
 
 def get_postrun_dataset_summaries() -> Optional[Dict]:
-    return safe_request("GET", f"{API_BASE}/postrun/graphs/dataset-summaries", show_errors=False)
+    return _as_dict_payload(safe_request("GET", f"{API_BASE}/postrun/graphs/dataset-summaries", show_errors=False))
 
 
 def get_continual_readiness(limit: int = 100) -> Optional[Dict]:
-    return safe_request("GET", f"{API_BASE}/continual/retraining-readiness?limit={limit}", show_errors=False)
+    return _as_dict_payload(
+        safe_request("GET", f"{API_BASE}/continual/retraining-readiness?limit={limit}", show_errors=False)
+    )
 
 
 def get_continual_export(status: str = "pending", limit: int = 200) -> Optional[Dict]:
-    return safe_request(
-        "GET",
-        f"{API_BASE}/continual/retraining-export?status={status}&limit={limit}",
-        show_errors=False,
+    return _as_dict_payload(
+        safe_request(
+            "GET",
+            f"{API_BASE}/continual/retraining-export?status={status}&limit={limit}",
+            show_errors=False,
+        )
     )

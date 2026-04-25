@@ -23,9 +23,24 @@ router = APIRouter(prefix="/api", tags=["attribution"])
 @router.get("/attribution/{run_id}")
 async def get_attribution(
     run_id: str,
+    request: Request,
     conn: asyncpg.Connection = Depends(get_db_conn),
 ):
     """Retrieve all cost attribution records for a given pipeline run."""
+    # Keep backward compatibility with the legacy dynamic route order where
+    # `/api/attribution/forecast` may be captured as run_id="forecast".
+    if run_id == "forecast":
+        horizon_days = 7
+        try:
+            raw = request.query_params.get("horizon_days")
+            if raw is not None:
+                parsed = int(raw)
+                if 1 <= parsed <= 30:
+                    horizon_days = parsed
+        except Exception:
+            horizon_days = 7
+        return await forecast_costs(request.app.state.db, horizon_days)
+
     try:
         rows = await conn.fetch(
             """

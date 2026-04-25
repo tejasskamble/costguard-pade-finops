@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Optional
 
@@ -28,6 +29,18 @@ class PostRunImportRequest(BaseModel):
     results_root: Optional[str] = None
     chunk_size: int = Field(default=100_000, ge=1_000, le=1_000_000)
     min_ensemble_f1: float = Field(default=0.80, ge=0.0, le=1.0)
+
+
+def _as_json_object(value: object) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
 
 
 @router.get("/summary")
@@ -116,9 +129,14 @@ async def postrun_import_history(
     except Exception as exc:
         logger.exception("Post-run history query failed: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to read post-run import history.")
+    normalized_rows = []
+    for row in rows:
+        payload = dict(row)
+        payload["summary"] = _as_json_object(payload.get("summary"))
+        normalized_rows.append(payload)
     return {
         "status": "ok",
-        "rows": [dict(row) for row in rows],
+        "rows": normalized_rows,
     }
 
 

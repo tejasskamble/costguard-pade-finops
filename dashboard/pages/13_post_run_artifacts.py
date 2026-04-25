@@ -1,6 +1,7 @@
 """Post-run IEEE artifacts dashboard backed by imported database tables."""
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -20,12 +21,32 @@ from utils.api_client import (
     run_postrun_import,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _safe_rows(payload: Dict[str, Any] | None, key: str = "rows") -> List[Dict[str, Any]]:
-    if not payload:
+    if not isinstance(payload, dict):
         return []
-    rows = payload.get(key, [])
-    return rows if isinstance(rows, list) else []
+    rows = payload.get(key)
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _safe_chart_line(data: Any) -> None:
+    try:
+        st.line_chart(data)
+    except Exception as exc:
+        logger.warning("Line chart rendering failed: %s", exc)
+        st.warning("Seed chart unavailable for the current dataset shape.")
+
+
+def _safe_chart_bar(data: Any) -> None:
+    try:
+        st.bar_chart(data)
+    except Exception as exc:
+        logger.warning("Bar chart rendering failed: %s", exc)
+        st.warning("Bar chart unavailable for the current dataset shape.")
 
 
 def _domain_label(value: str) -> str:
@@ -139,6 +160,10 @@ domains_seen = sorted(
 )
 latest_import = history_rows[0] if history_rows else {}
 latest_import_summary = latest_import.get("summary", {}) if isinstance(latest_import, dict) else {}
+if isinstance(latest_import_summary, str):
+    latest_import_summary = {}
+elif not isinstance(latest_import_summary, dict):
+    latest_import_summary = {}
 aggregate_metric_count = int(latest_import_summary.get("aggregate_metric_rows", 0) or 0)
 
 st.markdown("### IEEE Overview")
@@ -165,7 +190,7 @@ if seed_metric_rows:
     seed_metric_df["domain"] = seed_metric_df["domain"].map(_domain_label)
     st.dataframe(seed_metric_df, use_container_width=True, hide_index=True)
     pivot_df = seed_metric_df.pivot(index="seed", columns="domain", values="metric_value")
-    st.line_chart(pivot_df)
+    _safe_chart_line(pivot_df)
 else:
     st.warning("Seed metric rows are missing.")
 
@@ -174,7 +199,7 @@ if domain_metric_rows:
     domain_metric_df = pd.DataFrame(domain_metric_rows)
     domain_metric_df["domain"] = domain_metric_df["domain"].map(_domain_label)
     st.dataframe(domain_metric_df, use_container_width=True, hide_index=True)
-    st.bar_chart(domain_metric_df.set_index("domain")["mean_value"])
+    _safe_chart_bar(domain_metric_df.set_index("domain")["mean_value"])
 else:
     st.warning("Domain metric aggregates are missing.")
 
@@ -187,7 +212,7 @@ if dataset_rows:
         dataset_df.groupby(["domain", "dataset_name"], as_index=False)["total_rows"].sum()
         .sort_values(["domain", "dataset_name"])
     )
-    st.bar_chart(dataset_chart_df.set_index("dataset_name")["total_rows"])
+    _safe_chart_bar(dataset_chart_df.set_index("dataset_name")["total_rows"])
 else:
     st.warning("Prepared dataset summaries are missing.")
 

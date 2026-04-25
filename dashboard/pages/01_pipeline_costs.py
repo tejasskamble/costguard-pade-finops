@@ -174,7 +174,7 @@ def _render_forecast(forecast_data: dict) -> None:
         y=(bridge_cost + fc_upper) + list(reversed(bridge_cost + fc_lower)),
         fill="toself",
         fillcolor="rgba(249,115,22,0.10)",
-        line=dict(color="transparent"),
+        line=dict(color="rgba(0,0,0,0)"),
         name="80% CI Band",
         hoverinfo="skip",
         showlegend=True,
