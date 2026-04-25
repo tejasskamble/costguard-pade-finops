@@ -1,0 +1,668 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[a4paper,margin=0.72in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{siunitx}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{balance}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{placeins}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue,
+  pdftitle={CostGuard: Policy-Governed Cost Anomaly Intelligence for Cloud DevOps Pipelines},
+  pdfauthor={Tejas Sudhakar Kamble}
+}
+
+\title{CostGuard: Policy-Governed Cost Anomaly Intelligence for Cloud DevOps Pipelines}
+\author{Tejas Sudhakar Kamble}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\setlength{\columnsep}{0.24in}
+\sloppy
+\emergencystretch=3em
+\raggedbottom
+
+\begin{abstract}
+Cloud DevOps teams optimize delivery speed aggressively, but actionable cost signals often appear only after release decisions are already executed. This paper presents CostGuard PADE, a policy-governed anomaly intelligence system that moves FinOps control from retrospective reporting into CI/CD runtime. CostGuard combines two model views: an attention-enhanced residual BiLSTM branch for stage-sequence behavior and a GATv2 branch for dependency-aware graph behavior. Their outputs are integrated through adaptive ensembling, where weighted fusion is applied only when branch calibration is favorable and \texttt{lstm\_only} routing is selected otherwise. The resulting risk signal is mapped to Cost Risk Score (CRS) and evaluated by an Open Policy Agent (OPA) governance layer that emits auditable actions (\texttt{ALLOW}, \texttt{WARN}, \texttt{AUTO\_OPTIMISE}, \texttt{BLOCK}) with deterministic inline fallback.
+
+Evaluation follows a fixed ten-seed protocol (42--132) across lifelong domains D0 (Synthetic), L1 (TravisTorrent), and L2 (BitBrains). Mean ensemble F1/PR-AUC is 0.8962/0.9648 (D0), 0.9087/0.9419 (L1), and 0.9606/0.9763 (L2), with low variance in real domains and full 10/10 trial completion. Runs were executed under an RTX 3050 4-GB profile using memory-safe controls: 30 epochs, patience 5, adaptive batch downshift, bounded preprocessing, and phase-level VRAM flush checkpoints. The core outcome is practical rather than only architectural: anomaly models become operationally meaningful when coupled with policy automation, traceable decisions, and reproducible evidence.
+\end{abstract}
+
+\noindent\textbf{Keywords:} FinOps, CI/CD, anomaly detection, LSTM, GATv2, Open Policy Agent, policy-as-code, reproducibility.
+
+\medskip
+\noindent\textit{This manuscript is derived from the author's MSc research work on CostGuard PADE. The technical contributions are presented here in a consolidated single-author research format, without academic submission front matter.}
+
+\FloatBarrier
+\section{Introduction}
+Cloud-native CI/CD pipelines now execute a large portion of software lifecycle cost: build runners, integration tests, security scans, image creation, and staged deployment. Teams have strong quality and velocity telemetry, but financially actionable feedback is typically delayed until billing reconciliation. This mismatch creates a structural FinOps problem: the cost signal arrives after the decision window closes.
+
+CostGuard targets this gap by embedding cost anomaly intelligence directly into the delivery control loop. Instead of producing only post hoc dashboards, it couples anomaly scoring to policy decisions that can warn, optimize, or block risky stage execution. The goal is not only predictive performance; the goal is accountable operational behavior.
+
+The paper is guided by four research questions:
+\begin{itemize}
+\item \textbf{RQ1:} Can a temporal-graph hybrid model maintain reliable anomaly quality across heterogeneous domains?
+\item \textbf{RQ2:} Can policy-as-code convert model scores into auditable runtime actions for CI/CD governance?
+\item \textbf{RQ3:} Can strict seed-wise reproducibility be preserved under commodity 4-GB GPU constraints?
+\item \textbf{RQ4:} Can the resulting approach be delivered as a practical engineering system, not only an offline benchmark?
+\end{itemize}
+
+Contributions are fourfold: (i) a dual-view anomaly model (LSTM + GATv2) with adaptive fusion, (ii) CRS-to-policy actioning through OPA with deterministic fallback, (iii) a fixed ten-seed D0$\rightarrow$L1$\rightarrow$L2 protocol with immutable aggregates, and (iv) a full implementation path using FastAPI, PostgreSQL, and Streamlit for operational adoption.
+
+\FloatBarrier
+\section{Related Work}
+\subsection{Sequence and Graph Foundations}
+LSTM remains a standard approach for long-range dependency learning \cite{ref_lstm}. That property is important for cost-risk modeling because economically significant effects often emerge several stages after a triggering event. Graph Attention Networks learn edge influence rather than assuming uniform neighborhood impact \cite{ref_gat}, which is suitable for CI/CD DAGs where transitions are not equally consequential.
+
+Related graph work also shows value when dependency structure is incomplete or weakly labeled \cite{ref_ghostlink,ref_wsvsp}. These insights support using graph reasoning in pipeline telemetry where link quality may vary by project, stage metadata, or instrumentation maturity.
+
+\subsection{FinOps and Cost Optimization}
+FinOps studies emphasize observability, optimization governance, and standardized usage semantics \cite{ref_deochake_review,ref_abacus,ref_optic,ref_focus}. They provide strong motivation for action-oriented cost control, but many reports stop at architecture patterns or case narratives. Reproducible, seed-controlled ML evidence linked to deployment decisions remains limited.
+
+\subsection{CI/CD Governance and Operational Control}
+ML-assisted CI/CD studies report improvements in software delivery efficiency \cite{ref_sridivya,ref_lokiny,ref_koneru,ref_thason,ref_pereira}. Governance-oriented work highlights rule-bounded automation and policy simulation in cloud systems \cite{ref_kirubakaran,ref_slingshot,ref_serflow}. The unresolved gap is integration depth: model quality, policy decisions, and deployment-grade evidence are often evaluated in isolation.
+
+\begin{table}[H]
+\centering
+\caption{Positioning of prior literature against integrated CI/CD FinOps requirements.}
+\label{tab:lit_positioning}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{L{0.20\textwidth}L{0.28\textwidth}L{0.46\textwidth}}
+\toprule
+Theme & Representative direction & Integration gap addressed in CostGuard \\
+\midrule
+Temporal modeling & LSTM memory-based sequence learning \cite{ref_lstm} & Strong delayed-dependency learning, but no policy actioning path or runtime governance records. \\
+Dependency modeling & Graph attention and latent link inference \cite{ref_gat,ref_ghostlink,ref_wsvsp} & Strong relational reasoning, but limited seed-controlled CI/CD cost-risk evidence. \\
+FinOps strategy & Cost optimization and service-oriented governance \cite{ref_deochake_review,ref_abacus,ref_optic} & Mature governance concepts, but limited coupling to model-controlled release decisions. \\
+CI/CD optimization & ML-based delivery acceleration studies \cite{ref_sridivya,ref_lokiny,ref_koneru,ref_thason,ref_pereira} & Better throughput and quality, but weak policy provenance and auditable cost-risk controls. \\
+Policy control & Agentic and elasticity policy frameworks \cite{ref_kirubakaran,ref_slingshot,ref_serflow} & Strong policy framing, but insufficient cross-domain anomaly benchmarking with frozen artifacts. \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\FloatBarrier
+\section{Methodology}
+\subsection{Problem Framing}
+CostGuard models stage-level cost anomaly probability and maps it to governance actions. The methodological objective is to preserve predictive quality and reproducibility while maintaining deployment-safe controls in constrained hardware settings.
+
+\subsection{Temporal Branch (LSTM)}
+The sequence branch uses residual BiLSTM layers with attention. Given telemetry sequence \(x_t\), LSTM gates are:
+\begin{equation}
+\begin{aligned}
+i_t &= \sigma(W_i x_t + U_i h_{t-1} + b_i),\\
+f_t &= \sigma(W_f x_t + U_f h_{t-1} + b_f),
+\end{aligned}
+\end{equation}
+\begin{equation}
+\tilde{c}_t=\tanh(W_c x_t + U_c h_{t-1}+b_c),\quad
+c_t=f_t \odot c_{t-1}+i_t \odot \tilde{c}_t.
+\end{equation}
+This branch captures delayed cost effects across ordered CI/CD stages.
+
+\subsection{Graph Branch (GATv2)}
+The graph branch models inter-stage dependency influence:
+\begin{equation}
+\alpha_{ij}=\mathrm{softmax}_j\!\left(a^\top\mathrm{LeakyReLU}(W[h_i \| h_j])\right),
+\end{equation}
+\begin{equation}
+h_i'=\sum_{j\in\mathcal{N}(i)} \alpha_{ij}Wh_j.
+\end{equation}
+Attention coefficients \(\alpha_{ij}\) allow non-uniform transfer of risk signals along pipeline edges.
+
+\subsection{Adaptive Ensemble Logic}
+Validation PR-AUC calibrates branch weights:
+\begin{equation}
+\hat{p}_{ens}=w_L\hat{p}_{LSTM}+w_G\hat{p}_{GAT},
+\end{equation}
+\begin{equation}
+w_L=\frac{\mathrm{PR\text{-}AUC}_{LSTM}}{\mathrm{PR\text{-}AUC}_{LSTM}+\mathrm{PR\text{-}AUC}_{GAT}},\quad
+w_G=1-w_L.
+\end{equation}
+If branch alignment/calibration is unfavorable, routing switches to \texttt{lstm\_only}. This mechanism protects quality when graph signal is weaker in specific domains.
+
+\subsection{CRS, Thresholds, and Policy Interface}
+CRS is the governance-facing risk scalar. In runtime, the backend computes model risk and evaluates it with context through policy checks. Default threshold actions are:
+\[
+\texttt{ALLOW} \rightarrow \texttt{WARN} \rightarrow \texttt{AUTO\_OPTIMISE} \rightarrow \texttt{BLOCK}
+\]
+at CRS cutoffs 0.50, 0.75, and 0.90.
+
+The policy payload includes metrics (CRS, billed cost, latency), context (stage, branch, pull-request flags), and configurable policy bundle fields. OPA-first evaluation is paired with inline parity fallback to preserve continuity and provenance (\texttt{policy\_source}).
+
+\subsection{Leakage and Reproducibility Controls}
+Three controls are treated as hard constraints:
+\begin{itemize}
+\item Train-only scaler fitting for each seed/domain split.
+\item Validation-only threshold optimization, frozen before test inference.
+\item Seed-isolated artifacts and immutable aggregate generation.
+\end{itemize}
+Together, these controls reduce calibration drift and cross-seed contamination risk.
+
+\FloatBarrier
+\section{System Design and Implementation}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/diagram_costguard_pade_full_pipeline.png}
+\caption{End-to-end CostGuard PADE workflow from telemetry ingestion to policy-governed decision output.}
+\label{fig:architecture}
+\end{figure}
+
+CostGuard is implemented as a deployable system, not a benchmark-only script:
+\begin{itemize}
+\item \textbf{FastAPI backend} for inference, governance, post-run import, and analytics APIs.
+\item \textbf{PostgreSQL} for seed metrics, policy outcomes, run manifests, and audit history.
+\item \textbf{OPA governance} for policy-as-code evaluation with inline fallback safety.
+\item \textbf{Streamlit dashboard} for operator visibility and governance control surfaces.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/diagram_lstm_model_flow.png}
+\caption{LSTM dataflow used in CostGuard sequence modeling.}
+\label{fig:lstm_flow}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/diagram_gat_pipeline_flow.png}
+\caption{GATv2 dataflow used in dependency-aware pipeline modeling.}
+\label{fig:gat_flow}
+\end{figure}
+
+\subsection{Governance Rule Behavior}
+\begin{table}[H]
+\centering
+\caption{Policy bundle behavior in runtime governance.}
+\label{tab:policy_rules}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{L{0.32\columnwidth}L{0.62\columnwidth}}
+\toprule
+Rule type & Runtime effect \\
+\midrule
+Threshold gates & Escalation at CRS \(\ge\) 0.50, 0.75, and 0.90 \\
+Context gates & Branch/stage-specific blocking (for example, production deploy from PR context) \\
+Cost ceilings & Stage-specific cost overruns trigger \texttt{WARN} or \texttt{AUTO\_OPTIMISE} \\
+OPA fallback parity & Inline deterministic policy when OPA endpoint is unavailable \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Evidence Persistence}
+\begin{table}[H]
+\centering
+\caption{Representative persistence surfaces used for traceability.}
+\label{tab:persistence}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{L{0.39\columnwidth}L{0.55\columnwidth}}
+\toprule
+Table/Artifact family & Purpose \\
+\midrule
+\texttt{ieee\_seed\_runs} & Seed completion and execution metadata \\
+\texttt{ieee\_aggregate\_}\newline\texttt{metrics} & Domain-level summary metrics for reporting \\
+\texttt{ieee\_seed\_domain\_}\newline\texttt{metrics} & Per-seed, per-domain model performance \\
+\texttt{inference\_events} & CRS, decision class, policy source, and reasons \\
+\texttt{retraining\_queue} & Queue-based continual readiness without online weight mutation \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Engineering Decisions for Stable Execution}
+The training engine uses hardware-aware safety controls: adaptive batch ladders (\texttt{safe\_batch}), bounded preprocess chunking, conservative worker settings on Windows, and VRAM flush between model phases. In source logs, this appears as repeated \texttt{[GUARDIAN-PROFILE]} and \texttt{[VRAM-FLUSH]} events. These controls were required to preserve full trial completion under constrained VRAM rather than to maximize isolated benchmark throughput.
+
+\FloatBarrier
+\section{Experimental Setup}
+\subsection{Protocol and Domain Order}
+All experiments follow immutable lifelong order D0 Synthetic \(\rightarrow\) L1 TravisTorrent \(\rightarrow\) L2 BitBrains. Seed values are fixed to 42--132 at step 10, and aggregate outputs are computed from frozen per-seed artifacts.
+
+\begin{table}[H]
+\centering
+\caption{Dataset partitions used by sequence (Task-B) and graph (Task-C) training paths.}
+\label{tab:data_setup}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\multirow{2}{*}{Domain} & \multicolumn{3}{c}{Task-B (LSTM)} & \multicolumn{3}{c}{Task-C (GATv2)} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & Train & Val & Test & Train & Val & Test \\
+\midrule
+D0 Synthetic & 43,750 & 9,375 & 9,375 & 43,750 & 9,375 & 9,375 \\
+L1 TravisTorrent & 60,279 & 12,917 & 12,918 & 42,199 & 9,043 & 9,043 \\
+L2 BitBrains & 174,365 & 37,364 & 37,364 & 34,582 & 7,410 & 7,411 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Hardware and Runtime Envelope}
+\begin{table}[H]
+\centering
+\caption{Runtime profile used across all reported seeds.}
+\label{tab:runtime_profile}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{L{0.37\columnwidth}L{0.57\columnwidth}}
+\toprule
+Setting & Value \\
+\midrule
+GPU profile & NVIDIA RTX 3050 Laptop, 4095 MB VRAM \\
+Learning rate & \num{5e-4} \\
+Epoch horizon & 30 \\
+Early stopping & Patience \(= 5\) \\
+Seed protocol & 10 fixed seeds (42--132) \\
+Memory safety & Adaptive batching, chunked preprocessing, mixed-precision guard, VRAM flush \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Why 30 Epochs and Patience 5}
+The epoch budget was selected after observing diminishing validation gains beyond 30 epochs under the same memory guard profile. Patience 5 balanced two competing concerns: avoiding premature stop during noisy validation transitions while preventing unnecessary compute after convergence.
+
+\subsection{Completion Timeline}
+\begin{table}[H]
+\centering
+\caption{Per-seed completion evidence from frozen summary artifacts (UTC).}
+\label{tab:completion}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{cccc}
+\toprule
+Seed & Started & Completed & Status \\
+\midrule
+42 & 2026-04-22T06:33:37Z & 2026-04-22T06:51:27Z & complete \\
+52 & 2026-04-22T21:14:29Z & 2026-04-22T23:56:46Z & complete \\
+62 & 2026-04-23T11:35:00Z & 2026-04-23T12:22:42Z & complete \\
+72 & 2026-04-23T13:18:48Z & 2026-04-23T16:43:04Z & complete \\
+82 & 2026-04-23T19:26:09Z & 2026-04-23T21:28:13Z & complete \\
+92 & 2026-04-23T21:28:45Z & 2026-04-24T00:27:41Z & complete \\
+102 & 2026-04-24T00:28:14Z & 2026-04-24T03:31:36Z & complete \\
+112 & 2026-04-24T03:32:07Z & 2026-04-24T06:28:49Z & complete \\
+122 & 2026-04-24T06:29:21Z & 2026-04-24T09:47:16Z & complete \\
+132 & 2026-04-24T09:47:48Z & 2026-04-24T12:57:43Z & complete \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\FloatBarrier
+\section{Results and Discussion}
+\subsection{Aggregate Performance}
+\begin{table}[H]
+\centering
+\caption{Aggregate metrics by domain and branch (mean over 10 seeds).}
+\label{tab:aggregate}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llcccccc}
+\toprule
+Domain & Model & F1@opt & ROC-AUC & PR-AUC & Precision & Recall & Threshold \\
+\midrule
+Synthetic (D0) & LSTM & 0.9128 & 0.9526 & 0.9766 & 0.9326 & 0.8941 & 0.2940 \\
+Synthetic (D0) & GAT  & 0.7468 & 0.7646 & 0.8209 & 0.7104 & 0.7932 & 0.3790 \\
+Synthetic (D0) & ENS  & 0.8962 & 0.9354 & 0.9648 & 0.9139 & 0.8799 & 0.3900 \\
+TravisTorrent (L1) & LSTM & 0.9087 & 0.8133 & 0.9419 & 0.8454 & 0.9825 & 0.3710 \\
+TravisTorrent (L1) & GAT  & 0.7683 & 0.6939 & 0.8274 & 0.6246 & 0.9981 & 0.3370 \\
+TravisTorrent (L1) & ENS  & 0.9087 & 0.8133 & 0.9419 & 0.8454 & 0.9825 & 0.3710 \\
+BitBrains (L2) & LSTM & 0.9606 & 0.9628 & 0.9763 & 0.9271 & 0.9966 & 0.1800 \\
+BitBrains (L2) & GAT  & 0.8760 & 0.5905 & 0.8281 & 0.7800 & 0.9990 & 0.2480 \\
+BitBrains (L2) & ENS  & 0.9606 & 0.9628 & 0.9763 & 0.9271 & 0.9966 & 0.1800 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+BitBrains delivers the strongest aggregate separability, while TravisTorrent maintains high-recall behavior desirable for anomaly containment workflows. Synthetic has higher variance than real domains, but still remains within bounded spread under the fixed protocol.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/domain_metric_bar_comparison.png}
+\caption{Domain-level metric comparison for LSTM, GATv2, and ensemble outputs.}
+\label{fig:domain_bar}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/domain_ensemble_f1_boxplot.png}
+\caption{Distribution of ensemble F1 by domain.}
+\label{fig:domain_box}
+\end{figure}
+
+\subsection{Adaptive Strategy Behavior}
+\begin{table}[H]
+\centering
+\caption{Stability and strategy routing statistics.}
+\label{tab:stability}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{L{0.33\columnwidth}L{0.18\columnwidth}L{0.18\columnwidth}L{0.22\columnwidth}}
+\toprule
+Domain & F1 std & Min--Max & Strategy usage \\
+\midrule
+D0 Synthetic & 0.0122 & 0.8717--0.9178 & 9 weighted / 1 lstm \\
+L1 TravisTorrent & 0.0011 & 0.9059--0.9098 & 10 lstm \\
+L2 BitBrains & 0.0017 & 0.9579--0.9637 & 10 lstm \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+The key practical finding is not that weighted fusion always dominates. The key finding is that adaptive routing avoids introducing branch-specific degradation. In D0, weighted fusion is beneficial for most seeds. In L1/L2, \texttt{lstm\_only} preserves stronger calibrated behavior.
+
+\begin{table}[H]
+\centering
+\caption{Domain-level delta of ensemble F1.}
+\label{tab:delta}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\toprule
+Domain & ENS$-$LSTM & ENS$-$GAT & ENS threshold \\
+\midrule
+D0 Synthetic & $-0.0166$ & +0.1494 & 0.390 \\
+L1 TravisTorrent & 0.0000 & +0.1404 & 0.371 \\
+L2 BitBrains & 0.0000 & +0.0846 & 0.180 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/seedwise_f1_vs_seed_ensemble.png}
+\caption{Seed-wise ensemble F1 across the canonical ten-seed set.}
+\label{fig:seedwise}
+\end{figure}
+
+\subsection{Curve-Level Analysis}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/precision_recall_curves_by_domain.png}
+\caption{Precision-recall curves by domain.}
+\label{fig:pr}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/roc_auc_curves_by_domain.png}
+\caption{ROC curves by domain.}
+\label{fig:roc}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/training_loss_vs_epoch_seed_72.png}
+\caption{Representative training loss trajectory (seed 72).}
+\label{fig:loss_curve}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{results/final_outputs/ieee_ready/training_f1_vs_epoch_seed_72.png}
+\caption{Representative validation F1 trajectory (seed 72).}
+\label{fig:f1_curve}
+\end{figure}
+
+PR profiles remain strong in high-recall regions, which is essential for anomaly screening under class imbalance. Training curves support the chosen epoch/patience design: after early convergence, additional epochs add cost without proportional quality gain.
+
+\subsection{Operational Metrics Beyond F1}
+\begin{table}[H]
+\centering
+\caption{Average anomaly summary from imported test predictions.}
+\label{tab:anomaly_summary}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\toprule
+Domain & Mean anomaly rate & Mean anomaly count & Mean test size \\
+\midrule
+Synthetic & 0.6273 & 5881.1 & 9375 \\
+TravisTorrent & 0.6110 & 5525.0 & 9043 \\
+BitBrains & 0.7487 & 5548.6 & 7411 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Lifelong Retention}
+Backward Transfer remained \(0.0 \pm 0.0\) across all ten seeds, indicating no measurable forgetting signal in the reported three-stage progression.
+
+\FloatBarrier
+\section{Practical Implications}
+\textbf{1) Cost control in the decision window.}
+CostGuard enables intervention before spend propagation. Teams can act during pipeline execution rather than after monthly cloud billing analysis.
+
+\textbf{2) CI/CD anomaly detection with governance context.}
+Risk scoring is joined with stage and branch context. This reduces policy-blind actions where a low score might still be unsafe for sensitive deployment paths.
+
+\textbf{3) Deployment blocking as an explicit engineering control.}
+\texttt{BLOCK} decisions are produced from clear threshold and rule matches, allowing platform teams to encode release safety and cost constraints without hidden manual logic.
+
+\textbf{4) OPA-driven policy automation.}
+Policy bundles are externalized from model code, enabling governance updates (thresholds, stage ceilings, branch protections) independently from retraining cycles.
+
+\textbf{5) Evidence reuse across research and operations.}
+The same artifacts that support paper reproducibility also support audit, incident review, and optimization planning. This dual-use evidence model improves maintainability.
+
+\textbf{6) Incremental rollout path for DevOps teams.}
+Adoption can proceed in phases: monitor-only, then warn, then auto-optimize/block once governance confidence and incident response workflows are mature.
+
+\FloatBarrier
+\section{Limitations and Threats to Validity}
+\textbf{Dataset scope.}
+Three domains reduce narrow benchmark bias but do not cover all enterprise CI/CD and pricing behaviors.
+
+\textbf{Domain shift risk.}
+Calibration may drift under different runner classes, cloud billing semantics, or workload mixes. Periodic recalibration remains necessary.
+
+\textbf{Graph branch maturity.}
+Graph-only quality remains domain-sensitive, and adaptive routing often falls back to \texttt{lstm\_only} in real domains. Richer graph features are a clear next step.
+
+\textbf{Deployment envelope constraints.}
+Results are demonstrated under a 4-GB class GPU and bounded memory controls. Different hardware may change runtime-quality tradeoffs.
+
+\textbf{Construct validity risk.}
+High offline metrics alone do not guarantee governance usefulness. This work mitigates that risk by persisting policy reasons, actions, and decision provenance fields.
+
+\FloatBarrier
+\section{Reproducibility Notes}
+The reproducibility contract is explicit and executable:
+\begin{itemize}
+\item Fixed seed set: 42, 52, 62, 72, 82, 92, 102, 112, 122, 132.
+\item Fixed domain order: D0 Synthetic, L1 TravisTorrent, L2 BitBrains.
+\item Train-only scaler fitting and validation-only threshold locking.
+\item Seed-isolated run directories with per-run manifests and completion markers.
+\item Aggregate regeneration from immutable result artifacts.
+\end{itemize}
+
+Reference execution path:
+\begin{verbatim}
+bash run_ieee_trials.sh --ieee-10 \
+  --laptop-safe --resume-epoch
+\end{verbatim}
+
+Observed completion evidence in the completion summary CSV and the
+training terminal log confirms 10/10 completed runs from 2026-04-22 to
+2026-04-24 (UTC).
+
+\FloatBarrier
+\section{Conclusion}
+CostGuard demonstrates that anomaly intelligence becomes materially more useful when integrated with policy-as-code and runtime governance. Under a fixed ten-seed, three-domain protocol, the system delivers stable high-quality anomaly detection, deterministic decision pathways, and deployable evidence traces on constrained hardware. The contribution is not a single model improvement; it is an integrated, reproducible control loop connecting ML scoring to enforceable CI/CD cost governance.
+
+\begingroup
+\raggedright
+\begin{thebibliography}{00}
+\bibitem{ref_lstm}
+S. Hochreiter and J. Schmidhuber, ``Long Short-Term Memory,'' \emph{Neural Computation}, vol. 9, no. 8, pp. 1735--1780, 1997.
+
+\bibitem{ref_gat}
+P. Veli\v{c}kovi\'c, G. Cucurull, A. Casanova, A. Romero, P. Li\`o, and Y. Bengio, ``Graph Attention Networks,'' in \emph{Proc. ICLR}, 2018.
+
+\bibitem{ref_ghostlink}
+S. Mukherjee and S. G\"unnemann, ``GhostLink: Latent Network Inference for Influence-Aware Recommendation,'' in \emph{Proc. CIKM}, 2019.
+
+\bibitem{ref_wsvsp}
+A. Zareian, S. Karaman, and S.-F. Chang, ``Weakly Supervised Visual Semantic Parsing,'' in \emph{Proc. CVPR}, 2020.
+
+\bibitem{ref_sridivya}
+R. Sridivya, M. S. Vijayabaskar, and K. Vimaladevi, ``Machine Learning-Driven Improvements in Software Delivery Pipelines,'' \emph{Journal of Theoretical and Applied Information Technology}, vol. 103, no. 19, 2025.
+
+\bibitem{ref_lokiny}
+N. Lokiny and P. Reddy, ``Cost Optimization Strategies for DevOps Deployments in Cloud Environments Leveraging Machine Learning,'' \emph{European Journal of Advances in Engineering and Technology}, vol. 8, no. 3, pp. 69--72, 2021.
+
+\bibitem{ref_koneru}
+N. M. K. Koneru, ``Optimizing CI/CD Pipelines for Multi-Cloud Environments: Strategies for AWS and Azure Integration,'' \emph{Eastasouth Journal of Information System and Computer Science}, vol. 2, no. 3, pp. 288--310, 2025.
+
+\bibitem{ref_thason}
+J. R. M. Thason and S. K. Bahl, ``Cloud Technology and DevOps: A Symbiotic Relationship,'' \emph{Journal of Emerging Technologies and Innovative Research}, vol. 12, no. 3, 2025.
+
+\bibitem{ref_pereira}
+L. R. Pereira, ``The Impact of CI/CD in Business Value,'' M.Sc. thesis, Aalborg University, 2025.
+
+\bibitem{ref_deochake_review}
+S. Deochake, ``Cloud and AI Infrastructure Cost Optimization: A Comprehensive Review of Strategies and Case Studies,'' 2025.
+
+\bibitem{ref_abacus}
+S. Deochake, ``ABACUS: A FinOps Service for Cloud Cost Optimization,'' 2025.
+
+\bibitem{ref_slingshot}
+F. Klinaku, S. S. Stie, A. Hakamian, and S. Becker, ``An Architectural View Type for Elasticity Policies---The Slingshot Approach,'' 2024.
+
+\bibitem{ref_serflow}
+Z. Zhang and I. Matta, ``SERFLOW: A Cross-Service Cost Optimization Framework for SLO-Aware Dynamic ML Inference,'' 2025.
+
+\bibitem{ref_kirubakaran}
+A. M. Kirubakaran \emph{et al.}, ``Governing Cloud Data Pipelines with Agentic AI,'' 2025.
+
+\bibitem{ref_optic}
+G. N. Junior and C. Marcon, ``OPTIC: OPtimized Translation and Interaction for Cloud-Costs Using FOCUS Standardization and LLM Integration,'' \emph{IEEE Access}, 2025.
+
+\bibitem{ref_opa}
+Open Policy Agent, ``Open Policy Agent Documentation,'' 2024. [Online]. Available: \url{https://www.openpolicyagent.org/docs/latest/}
+
+\bibitem{ref_focus}
+FinOps Foundation, ``FinOps Open Cost and Usage Specification (FOCUS),'' 2025. [Online]. Available: \url{https://focus.finops.org/}
+
+\bibitem{ref_costguard}
+T. S. Kamble, ``CostGuard repository and experiment artifacts,'' 2026. [Online]. Available: \url{https://github.com/tejasskamble/costguard-pade-finops}
+\end{thebibliography}
+\endgroup
+
+\clearpage
+\onecolumn
+\appendix
+
+\FloatBarrier
+\section{Per-Seed Ensemble F1}
+\begin{table}[H]
+\centering
+\caption{Per-seed ensemble F1 values used in aggregate analysis.}
+\label{tab:perseed}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{cccc}
+\toprule
+Seed & D0 Synthetic & L1 TravisTorrent & L2 BitBrains \\
+\midrule
+42 & 0.8717 & 0.9059 & 0.9579 \\
+52 & 0.8972 & 0.9093 & 0.9608 \\
+62 & 0.8907 & 0.9080 & 0.9611 \\
+72 & 0.9004 & 0.9098 & 0.9601 \\
+82 & 0.9178 & 0.9090 & 0.9637 \\
+92 & 0.8935 & 0.9086 & 0.9596 \\
+102 & 0.8895 & 0.9096 & 0.9617 \\
+112 & 0.8931 & 0.9087 & 0.9610 \\
+122 & 0.8992 & 0.9096 & 0.9586 \\
+132 & 0.9091 & 0.9085 & 0.9614 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\FloatBarrier
+\section{Extended Seed Metrics}
+\begin{table}[H]
+\centering
+\caption{Extended per-seed ensemble metrics (F1 and PR-AUC).}
+\label{tab:extended_seed}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{ccccccc}
+\toprule
+Seed & D0 F1 & D0 PR-AUC & L1 F1 & L1 PR-AUC & L2 F1 & L2 PR-AUC \\
+\midrule
+42 & 0.8717 & 0.9552 & 0.9059 & 0.9491 & 0.9579 & 0.9717 \\
+52 & 0.8972 & 0.9668 & 0.9093 & 0.9435 & 0.9608 & 0.9776 \\
+62 & 0.8907 & 0.9645 & 0.9080 & 0.9366 & 0.9611 & 0.9770 \\
+72 & 0.9004 & 0.9645 & 0.9098 & 0.9436 & 0.9601 & 0.9770 \\
+82 & 0.9178 & 0.9781 & 0.9090 & 0.9434 & 0.9637 & 0.9794 \\
+92 & 0.8935 & 0.9667 & 0.9086 & 0.9417 & 0.9596 & 0.9763 \\
+102 & 0.8895 & 0.9643 & 0.9096 & 0.9439 & 0.9617 & 0.9770 \\
+112 & 0.8931 & 0.9644 & 0.9087 & 0.9351 & 0.9610 & 0.9767 \\
+122 & 0.8992 & 0.9563 & 0.9096 & 0.9393 & 0.9586 & 0.9731 \\
+132 & 0.9091 & 0.9669 & 0.9085 & 0.9433 & 0.9614 & 0.9771 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\FloatBarrier
+\section{Representative Governance Scenarios}
+\begin{table}[H]
+\centering
+\caption{Example policy-evaluation outcomes in CostGuard runtime.}
+\label{tab:scenarios}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{L{0.26\textwidth}L{0.26\textwidth}L{0.42\textwidth}}
+\toprule
+Context & Condition & Expected action \\
+\midrule
+Protected branch production deploy from PR & Context rule hit & \texttt{BLOCK}, independent of low CRS \\
+Standard stage & \(0.50 \le CRS < 0.75\) & \texttt{WARN} with owner notification \\
+Sensitive stage with cost ceiling breach & Cost + context trigger & \texttt{AUTO\_OPTIMISE} plus remediation guidance \\
+Any stage & \(CRS \ge 0.90\) & \texttt{BLOCK} and pipeline halt \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\FloatBarrier
+\section{Reproducibility Checklist}
+The following checklist was used to keep execution and reporting deterministic:
+\begin{enumerate}
+\item Freeze domain order to D0, L1, L2 for all seeds.
+\item Keep seed set fixed at 42--132 and disallow ad hoc seed insertion.
+\item Refit scalers only on train partitions for each seed/domain.
+\item Tune thresholds only on validation outputs and freeze before test inference.
+\item Persist per-seed manifests and stage completion markers.
+\item Keep aggregate generation read-only over frozen per-seed artifacts.
+\item Confirm 10/10 completion in \texttt{completion\_summary.csv}.
+\item Store orchestration output in \texttt{training\_terminal\_logs.md}.
+\item Preserve hardware profile logs (\texttt{[GUARDIAN-PROFILE]} entries).
+\item Preserve phase transitions and VRAM flush logs between model branches.
+\end{enumerate}
+
+\FloatBarrier
+\section{Memory-Safe Design Rationale}
+CostGuard was executed under a constrained RTX 3050 profile. Three design choices were essential to completion reliability.
+\begin{itemize}
+\item \textbf{Adaptive batching:} batch sizes are reduced according to available VRAM and RAM tiers, with conservative limits for graph workloads.
+\item \textbf{Bounded preprocessing:} data loading avoids unsafe full materialization and prefers chunked processing where required.
+\item \textbf{Phase-level VRAM maintenance:} explicit memory flush checkpoints are run between LSTM and GAT phases to reduce carry-over pressure.
+\end{itemize}
+
+These controls are part of experiment design and reproducibility hygiene. They are reported because they materially influence whether multi-seed evidence can be completed and audited.
+\end{document}
+

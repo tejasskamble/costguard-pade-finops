@@ -6,6 +6,23 @@ CostGuard is a publication-grade FinOps and ML observability platform built arou
 - `L1 = TravisTorrent`
 - `L2 = BitBrains`
 
+## Public Research Release
+
+This repository is the public release of **CostGuard PADE** for **DevOps/FinOps cost anomaly detection** in CI/CD pipelines.
+
+- Core anomaly intelligence: **LSTM + GATv2 + adaptive ensemble**
+- Governance layer: **OPA policy-as-code** with deterministic inline fallback
+- Reproducibility contract: fixed **10-seed protocol** (42-132) with aggregate artifacts
+- Manuscript artifacts included for publication visibility:
+  - `arxiv_publish.tex`
+  - `arxiv_publish.pdf`
+  - `ieee_publish_paper.tex`
+  - `ieee_publish_paper.pdf`
+
+Author metadata:
+- **Tejas Sudhakar Kamble**
+- **tejasuskamble@gmail.com**
+
 The hardened repository supports both the canonical single-seed demo profile on `Seed 42` and the official resumable IEEE multi-trial workflow driven by `bash run_ieee_trials.sh --ieee-10`. Both flows preserve the same lifelong order, analytics contract, and publication outputs under a single canonical `results/` artifact store.
 
 ## What This Repository Delivers

@@ -86,3 +86,32 @@ desktop.ini
 
 # Node (if any frontend tooling added)
 node_modules/
+
+# LaTeX build intermediates
+*.aux
+*.out
+*.lof
+*.lot
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Local dissertation/certificate artifacts (never publish)
+20_Previous_Research_Papers.*
+CoverPageRP.pdf
+RP CetificateUpdated.docx
+dissertation_common_content.tex
+college_research.*
+aditya_yenare_research.*
+rahul_dhawale_research.*
+tejas_kamble_research.*
+certificate*
+cert_*.png
+certcheck_*.png
+certfinal_*.png
+decl_*.png
+out_*.png
+finalcheck_*.png
+collegelogo.png
+departmentlogo.png
