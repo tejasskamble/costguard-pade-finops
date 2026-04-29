@@ -7,6 +7,7 @@ import os
 
 import streamlit as st
 import pandas as pd
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import (
     is_authenticated, submit_enquiry, get_my_enquiries, get_faq,
     log_page_visit, get_token,
@@ -19,23 +20,17 @@ if not is_authenticated():
     st.stop()
 
 log_page_visit("08_support")
+apply_cinematic_ui("08_support")
 
-st.markdown("""
-<style>
-.cg-page-header{background:linear-gradient(135deg,rgba(255,107,53,.08) 0%,rgba(44,62,122,.06) 100%);
-  border:1px solid rgba(255,107,53,.15);border-radius:16px;padding:24px 28px;margin-bottom:24px;}
-.cg-page-header h1{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:#fff;margin:0;}
-.cg-page-header p{color:#6B7A99;margin:6px 0 0;}
-.status-open{color:#FF9500;} .status-resolved{color:#00D4AA;} .status-closed{color:#6B7A99;}
-.enq-row{background:#0D1B2E;border:1px solid rgba(255,107,53,.12);border-radius:10px;
-  padding:14px 18px;margin:6px 0;display:flex;align-items:center;gap:16px;}
-</style>""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="cg-page-header">
-  <h1>📨 Support & Enquiry</h1>
-  <p>Get help from our team — typical response within 2 hours for business-hours submissions</p>
-</div>""", unsafe_allow_html=True)
+st.markdown(
+    cinematic_header(
+        "Support Operations",
+        "Submit enquiries, monitor support tickets, and access FAQ guidance.",
+        icon="SUPPORT",
+        status="Response Channel Open",
+    ),
+    unsafe_allow_html=True,
+)
 
 tab1, tab2, tab3 = st.tabs(["📝 New Enquiry", "📋 My Enquiries", "❓ FAQ"])
 

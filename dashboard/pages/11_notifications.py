@@ -4,6 +4,7 @@ dashboard/pages/11_notifications.py - CostGuard v17.0
 Notification preferences and delivery checks for CostGuard.
 """
 import streamlit as st
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import (
     is_authenticated, get_notification_prefs, update_notification_prefs,
     send_test_notification, log_page_visit,
@@ -14,22 +15,17 @@ if not is_authenticated():
     st.stop()
 
 log_page_visit("11_notifications")
+apply_cinematic_ui("11_notifications")
 
-st.markdown("""
-<style>
-.cg-page-header{background:linear-gradient(135deg,rgba(255,107,53,.08) 0%,rgba(44,62,122,.06) 100%);
-  border:1px solid rgba(255,107,53,.15);border-radius:16px;padding:24px 28px;margin-bottom:24px;}
-.cg-page-header h1{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:#fff;margin:0;}
-.cg-page-header p{color:#6B7A99;margin:6px 0 0;}
-.pref-card{background:#0D1B2E;border:1px solid rgba(255,107,53,.15);border-radius:14px;padding:24px 26px;margin:12px 0;}
-.pref-card h4{color:#FF6B35;font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;margin:0 0 16px;}
-</style>""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="cg-page-header">
-  <h1>🔔 Notifications & Alerts Config</h1>
-  <p>Configure how and when CostGuard alerts you about anomalies, budget overruns, and digests</p>
-</div>""", unsafe_allow_html=True)
+st.markdown(
+    cinematic_header(
+        "Notification Grid",
+        "Configure alert delivery for anomaly events, budget thresholds, and scheduled digests.",
+        icon="ALERTS",
+        status="Dispatch Network Ready",
+    ),
+    unsafe_allow_html=True,
+)
 
 # ── Load current preferences ──────────────────────────────────────────────────
 with st.spinner("Loading preferences…"):

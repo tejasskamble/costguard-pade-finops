@@ -6,6 +6,7 @@ Cross-provider cost and anomaly comparison views.
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import is_authenticated, get_exchange_rates, log_page_visit
 
 if not is_authenticated():
@@ -13,23 +14,17 @@ if not is_authenticated():
     st.stop()
 
 log_page_visit("09_cloud_compare")
+apply_cinematic_ui("09_cloud_compare")
 
-st.markdown("""
-<style>
-.cg-page-header{background:linear-gradient(135deg,rgba(255,107,53,.08) 0%,rgba(44,62,122,.06) 100%);
-  border:1px solid rgba(255,107,53,.15);border-radius:16px;padding:24px 28px;margin-bottom:24px;}
-.cg-page-header h1{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:#fff;margin:0;}
-.cg-page-header p{color:#6B7A99;margin:6px 0 0;}
-.provider-card{background:#0D1B2E;border-radius:14px;padding:20px 22px;border:2px solid transparent;
-  transition:border-color .2s;}
-.provider-card.best{border-color:#00D4AA;}
-</style>""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="cg-page-header">
-  <h1>☁️ Cloud Cost Comparison</h1>
-  <p>Side-by-side AWS vs GCP vs Azure cost analysis with live currency conversion and savings calculator</p>
-</div>""", unsafe_allow_html=True)
+st.markdown(
+    cinematic_header(
+        "Cloud Cost Comparator",
+        "Side-by-side AWS, GCP, and Azure cost analysis with currency conversion and savings simulation.",
+        icon="CLOUD",
+        status="Multi-Cloud Scanner Online",
+    ),
+    unsafe_allow_html=True,
+)
 
 # ── Currency ──────────────────────────────────────────────────────────────────
 rates = get_exchange_rates("USD")

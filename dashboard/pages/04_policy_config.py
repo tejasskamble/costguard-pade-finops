@@ -5,7 +5,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import get_policy, update_policy, upload_checkpoint, is_authenticated
+
+apply_cinematic_ui("04_policy_config")
 
 PLOTLY_LAYOUT = dict(
     plot_bgcolor="#0C1428",
@@ -77,12 +80,12 @@ def show() -> None:
         st.stop()
 
     st.markdown(
-        """
-        <div class="page-header">
-            <h1>Policy Configuration</h1>
-            <p>Manage CostGuard OPA governance, CRS thresholds, and backend checkpoint uploads.</p>
-        </div>
-        """,
+        cinematic_header(
+            "Governance Engine",
+            "Tune ALLOW / WARN / BLOCK decision rules and stage-level cost guardrails.",
+            icon="POLICY",
+            status="Policy Mesh Locked",
+        ),
         unsafe_allow_html=True,
     )
 
@@ -101,6 +104,16 @@ def show() -> None:
     c1.metric("WARN", f"{warn_val:.2f}")
     c2.metric("AUTO_OPTIMISE", f"{auto_val:.2f}")
     c3.metric("BLOCK", f"{block_val:.2f}")
+    st.markdown(
+        f"""
+        <div style="display:grid;gap:0.7rem;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:0.7rem;">
+          <div class="policy-rule-card"><div class="kpi-label">ALLOW RANGE</div><span class="policy-state-pill policy-allow">0.00 to {warn_val:.2f}</span></div>
+          <div class="policy-rule-card"><div class="kpi-label">WARN RANGE</div><span class="policy-state-pill policy-warn">{warn_val:.2f} to {auto_val:.2f}</span></div>
+          <div class="policy-rule-card"><div class="kpi-label">BLOCK RANGE</div><span class="policy-state-pill policy-block">{block_val:.2f} to 1.00</span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     fig = go.Figure()
     for x0, x1, color, label in [
@@ -128,6 +141,7 @@ def show() -> None:
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     st.markdown("### Governance Controls")
+    st.caption("Interactive threshold sliders and toggle controls feed directly into the policy bundle.")
     with st.form("policy_form"):
         warn = st.slider("WARN threshold", 0.0, 1.0, warn_val, 0.01)
         auto = st.slider("AUTO_OPTIMISE threshold", 0.0, 1.0, auto_val, 0.01)

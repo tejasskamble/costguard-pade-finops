@@ -11,12 +11,15 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import get_recent_alerts, get_forecast, get_daily_summary
+
+apply_cinematic_ui("01_pipeline_costs")
 
 # ── Shared Plotly dark layout (CONSTRAINT-B) ─────────────────────────────────
 PLOTLY_LAYOUT = dict(
-    plot_bgcolor  = "#0C1428",
-    paper_bgcolor = "#0C1428",
+    plot_bgcolor  = "rgba(8,12,24,0.82)",
+    paper_bgcolor = "rgba(0,0,0,0)",
     font          = dict(family="DM Sans, sans-serif", color="#94A3B8", size=12),
     xaxis         = dict(
         gridcolor="rgba(99,102,241,0.1)", linecolor="rgba(99,102,241,0.15)",
@@ -318,12 +321,15 @@ def _render_provider_donut(prov: dict, is_demo: bool) -> None:
 
 # ── Main page ─────────────────────────────────────────────────────────────────
 def show():
-    st.markdown("""
-    <div class="page-header">
-        <h1>📊 Pipeline Cost Overview</h1>
-        <p>30-day spend analysis, stage attribution, CRS heatmap, and 7-day AI forecast.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        cinematic_header(
+            "Predictive Intelligence Screen",
+            "30-day spend analysis, stage attribution, CRS heatmap, and 7-day AI forecast.",
+            icon="ANALYTICS",
+            status="Forecast Engine Active",
+        ),
+        unsafe_allow_html=True,
+    )
 
     _, col_ref = st.columns([4, 1])
     with col_ref:

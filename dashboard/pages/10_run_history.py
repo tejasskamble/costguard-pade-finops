@@ -6,6 +6,7 @@ Historical run review for the canonical CostGuard platform.
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import (
     is_authenticated, get_pipeline_runs, get_recent_alerts, log_page_visit,
 )
@@ -15,20 +16,17 @@ if not is_authenticated():
     st.stop()
 
 log_page_visit("10_run_history")
+apply_cinematic_ui("10_run_history")
 
-st.markdown("""
-<style>
-.cg-page-header{background:linear-gradient(135deg,rgba(255,107,53,.08) 0%,rgba(44,62,122,.06) 100%);
-  border:1px solid rgba(255,107,53,.15);border-radius:16px;padding:24px 28px;margin-bottom:24px;}
-.cg-page-header h1{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:#fff;margin:0;}
-.cg-page-header p{color:#6B7A99;margin:6px 0 0;}
-</style>""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="cg-page-header">
-  <h1>📜 Pipeline Run History</h1>
-  <p>Full searchable history of all pipeline runs with stage-level drill-down, tags, and export</p>
-</div>""", unsafe_allow_html=True)
+st.markdown(
+    cinematic_header(
+        "Run History Archive",
+        "Searchable pipeline run history with drill-down, comparisons, and exports.",
+        icon="ARCHIVE",
+        status="Timeline Synced",
+    ),
+    unsafe_allow_html=True,
+)
 
 # ── Filters ───────────────────────────────────────────────────────────────────
 with st.expander("🔍 Filters", expanded=True):

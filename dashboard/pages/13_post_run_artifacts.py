@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 import pandas as pd
 import streamlit as st
 
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import (
     get_continual_export,
     get_continual_readiness,
@@ -92,19 +93,19 @@ if not is_authenticated():
     st.stop()
 
 log_page_visit("13_post_run_artifacts")
+apply_cinematic_ui("13_post_run_artifacts")
 
 profile = st.session_state.get("user_profile", {})
 user_role = str(profile.get("role", "viewer")).lower()
 is_admin = user_role == "admin"
 
 st.markdown(
-    """
-<div style="background:linear-gradient(135deg,rgba(255,107,53,.08) 0%,rgba(44,62,122,.06) 100%);
-  border:1px solid rgba(255,107,53,.15);border-radius:16px;padding:24px 28px;margin-bottom:24px;">
-  <h1 style="margin:0;color:#E8F0FE;">Post-Run IEEE Artifacts</h1>
-  <p style="margin:6px 0 0;color:#6B7A99;">Database-backed overview for seeds, domains, model artifacts, OPA decisions, and continual-learning readiness.</p>
-</div>
-""",
+    cinematic_header(
+        "Post-Run Artifact Matrix",
+        "Database-backed view of seeds, model artifacts, governance decisions, and continual readiness.",
+        icon="ARTIFACTS",
+        status="Registry Synced",
+    ),
     unsafe_allow_html=True,
 )
 

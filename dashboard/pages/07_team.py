@@ -5,6 +5,7 @@ Team and user management for the enterprise dashboard.
 """
 import streamlit as st
 import pandas as pd
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import (
     is_authenticated, list_users, invite_user, update_user_role,
     get_user_activity, get_my_profile, get_gravatar_url, log_page_visit,
@@ -15,21 +16,17 @@ if not is_authenticated():
     st.stop()
 
 log_page_visit("07_team")
+apply_cinematic_ui("07_team")
 
-st.markdown("""
-<style>
-.cg-page-header{background:linear-gradient(135deg,rgba(255,107,53,.08) 0%,rgba(44,62,122,.06) 100%);
-  border:1px solid rgba(255,107,53,.15);border-radius:16px;padding:24px 28px;margin-bottom:24px;}
-.cg-page-header h1{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:#fff;margin:0;}
-.cg-page-header p{color:#6B7A99;margin:6px 0 0;}
-.user-card{background:#0D1B2E;border:1px solid rgba(255,107,53,.12);border-radius:12px;padding:16px 20px;margin:8px 0;display:flex;align-items:center;gap:16px;}
-</style>""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="cg-page-header">
-  <h1>👥 Team & User Management</h1>
-  <p>Manage your team, assign roles, track activity, and invite new members</p>
-</div>""", unsafe_allow_html=True)
+st.markdown(
+    cinematic_header(
+        "Team Command Roster",
+        "Manage team access, roles, activity, and invitations.",
+        icon="TEAM",
+        status="Identity Sync Active",
+    ),
+    unsafe_allow_html=True,
+)
 
 # Get current user profile to check admin status
 profile = st.session_state.get("user_profile", {})

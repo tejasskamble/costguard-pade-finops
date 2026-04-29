@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, timezone
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import (
     is_authenticated, get_forecast, get_exchange_rates, log_page_visit,
 )
@@ -16,20 +17,17 @@ if not is_authenticated():
     st.stop()
 
 log_page_visit("06_forecasting")
+apply_cinematic_ui("06_forecasting")
 
-st.markdown("""
-<style>
-.cg-page-header{background:linear-gradient(135deg,rgba(255,107,53,.08) 0%,rgba(44,62,122,.06) 100%);
-  border:1px solid rgba(255,107,53,.15);border-radius:16px;padding:24px 28px;margin-bottom:24px;}
-.cg-page-header h1{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:#fff;margin:0;}
-.cg-page-header p{color:#6B7A99;margin:6px 0 0;}
-</style>""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="cg-page-header">
-  <h1>🔮 Cost Forecasting Studio</h1>
-  <p>ARIMA-powered 30/60/90-day cost forecasts with budget burn simulation and multi-currency support</p>
-</div>""", unsafe_allow_html=True)
+st.markdown(
+    cinematic_header(
+        "Predictive Intelligence Screen",
+        "ARIMA-powered 30/60/90-day cost forecasts with budget simulation and multi-currency telemetry.",
+        icon="FORECAST",
+        status="Model Feed Online",
+    ),
+    unsafe_allow_html=True,
+)
 
 # ── Controls ──────────────────────────────────────────────────────────────────
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
@@ -86,34 +84,37 @@ upper = forecast_data.get("upper_bound", predicted)
 
 fig.add_trace(go.Scatter(
     x=dates, y=upper, mode="lines", line=dict(width=0),
-    name="Upper CI", fillcolor="rgba(255,107,53,0.08)", showlegend=False,
+    name="Upper CI", fillcolor="rgba(124,77,255,0.10)", showlegend=False,
 ))
 fig.add_trace(go.Scatter(
     x=dates, y=lower, mode="lines", fill="tonexty",
     line=dict(width=0), name="95% Confidence Interval",
-    fillcolor="rgba(255,107,53,0.08)",
+    fillcolor="rgba(124,77,255,0.10)",
 ))
 fig.add_trace(go.Scatter(
     x=dates, y=predicted, mode="lines+markers",
     name=f"Predicted Cost ({currency})",
-    line=dict(color="#FF6B35", width=2.5),
-    marker=dict(size=4, color="#FF6B35"),
+    line=dict(color="#00E5FF", width=2.8),
+    marker=dict(size=4, color="#7C4DFF"),
+    fill="tozeroy",
+    fillcolor="rgba(0,229,255,0.10)",
+    hovertemplate=f"<b>%{{x}}</b><br>Forecast: {currency} %{{y:,.2f}}<extra></extra>",
 ))
 
 # Budget line
 if budget > 0:
     daily_budget = (budget / 30) * fx_rate
-    fig.add_hline(y=daily_budget, line_dash="dash", line_color="#FFD700",
+    fig.add_hline(y=daily_budget, line_dash="dash", line_color="#FF3B3B",
                   annotation_text=f"Daily Budget ({currency} {daily_budget:.0f})",
-                  annotation_font_color="#FFD700")
+                  annotation_font_color="#FF3B3B")
 
 fig.update_layout(
     template="plotly_dark",
     paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(13,27,46,0.5)",
+    plot_bgcolor="rgba(8,12,24,0.75)",
     font=dict(family="DM Sans", color="#E8F0FE"),
-    xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
-    yaxis=dict(gridcolor="rgba(255,255,255,0.05)",
+    xaxis=dict(gridcolor="rgba(0,229,255,0.12)"),
+    yaxis=dict(gridcolor="rgba(124,77,255,0.15)",
                title=f"Daily Cost ({currency})"),
     legend=dict(bgcolor="rgba(0,0,0,0)"),
     height=420,

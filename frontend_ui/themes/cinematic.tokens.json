@@ -1,0 +1,22 @@
+{
+  "name": "costguard-cinematic-enterprise",
+  "mode": "dark",
+  "palette": {
+    "bg": "#04060D",
+    "surface": "#0E1326",
+    "electricBlue": "#00E5FF",
+    "cyberPurple": "#7C4DFF",
+    "neonGreen": "#00FFB2",
+    "alertRed": "#FF3B3B"
+  },
+  "typography": {
+    "heading": "Orbitron",
+    "display": "Rajdhani",
+    "body": "Inter"
+  },
+  "effects": {
+    "glassBlurPx": 12,
+    "glowRadiusPx": 24,
+    "borderOpacity": 0.22
+  }
+}

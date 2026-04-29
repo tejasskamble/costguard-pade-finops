@@ -9,6 +9,8 @@ import os
 import sys
 import requests as _requests
 import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
 from datetime import datetime
 
 st.set_page_config(
@@ -17,6 +19,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 
 from utils.api_client import (
     login, register, get_me, get_recent_alerts,
@@ -167,17 +170,22 @@ MASTER_CSS = """
 </style>
 """
 st.markdown(MASTER_CSS, unsafe_allow_html=True)
+apply_cinematic_ui("app_shell")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def page_header(icon: str, title: str, subtitle: str) -> None:
     """Render a branded page header div."""
-    st.markdown(f"""
-    <div class="cg-page-header">
-      <h1>{icon} {title}</h1>
-      <p>{subtitle}</p>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(
+        cinematic_header(
+            title=title,
+            subtitle=subtitle,
+            icon=icon,
+            status="Control Center Online",
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def kpi_card(label: str, value: str, delta: str = "", positive: bool = True, icon: str = "") -> str:
@@ -527,51 +535,167 @@ def render_auth():
 # ── Dashboard home page ───────────────────────────────────────────────────────
 
 def render_dashboard():
-    """Main dashboard: KPI cards + live alert feed."""
+    """Main dashboard: cinematic command center with live FinOps telemetry."""
     render_sidebar()
-    page_header("🏠", "Dashboard", "Real-time pipeline cost intelligence — CostGuard v17.0")
+    page_header("AI", "Cinematic Command Center", "Real-time FinOps, DevOps, and ML risk telemetry")
 
-    # KPI row
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Pipeline Cost", "$0.00", delta="No data yet")
-    with col2:
-        st.metric("Active Alerts", "0", delta="All clear")
-    with col3:
-        st.metric("PADE CRS Score", "—", delta="Model ready")
-    with col4:
-        st.metric("Budget Used", "0%", delta="On track")
+    with st.spinner("Syncing command center telemetry..."):
+        alerts = get_recent_alerts(limit=250) or []
 
-    st.markdown("---")
+    df = pd.DataFrame(alerts) if alerts else pd.DataFrame()
+    if not df.empty:
+        for numeric_col in ("billed_cost", "crs_score"):
+            if numeric_col in df.columns:
+                df[numeric_col] = pd.to_numeric(df[numeric_col], errors="coerce").fillna(0.0)
+        if "created_at" in df.columns:
+            df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce", utc=True)
 
-    # Quick-action cards
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("""<div class="kpi-card">
-          <div class="kpi-label">💰 Pipeline Costs</div>
-          <div class="kpi-value" style="font-size:1.1rem;">View breakdown by stage,<br>provider, and branch.</div>
-        </div>""", unsafe_allow_html=True)
-    with col2:
-        st.markdown("""<div class="kpi-card">
-          <div class="kpi-label">🧠 ML Training Lab</div>
-          <div class="kpi-value" style="font-size:1.1rem;">Train LSTM + GAT<br>anomaly detection models.</div>
-        </div>""", unsafe_allow_html=True)
-    with col3:
-        st.markdown("""<div class="kpi-card">
-          <div class="kpi-label">🔮 Cost Forecast</div>
-          <div class="kpi-value" style="font-size:1.1rem;">ARIMA 90-day forecast<br>with budget burn simulation.</div>
-        </div>""", unsafe_allow_html=True)
+    total_cost = float(df["billed_cost"].sum()) if "billed_cost" in df.columns else 0.0
+    active_pipelines = int(df["run_id"].nunique()) if "run_id" in df.columns else 0
+    avg_crs = float(df["crs_score"].mean()) if "crs_score" in df.columns and len(df) else 0.0
+    risk_decisions = {"WARN", "AUTO_OPTIMISE", "BLOCK"}
+    active_alerts = (
+        int(df[df["pade_decision"].isin(risk_decisions)].shape[0])
+        if "pade_decision" in df.columns
+        else 0
+    )
 
-    # Live alerts feed
-    st.markdown("### 🚨 Recent Alerts")
-    with st.spinner("Loading alerts…"):
-        alerts = get_recent_alerts(limit=10)
-    if alerts:
-        import pandas as pd
-        df = pd.DataFrame(alerts)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
-        st.info("No alerts yet. Ingest pipeline runs to start monitoring.")
+    risk_color = "#00FFB2" if avg_crs < 0.5 else "#FFD54F" if avg_crs < 0.8 else "#FF3B3B"
+    pulse_class = "pulse-alert" if active_alerts > 0 else ""
+    st.markdown(
+        f"""
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-glow" style="background:#00E5FF;"></div>
+            <div class="kpi-label">Total Cost</div>
+            <div class="kpi-value">${total_cost:,.4f}</div>
+            <div class="kpi-sub">Live aggregate pipeline spend</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-glow" style="background:#7C4DFF;"></div>
+            <div class="kpi-label">Active Pipelines</div>
+            <div class="kpi-value">{active_pipelines}</div>
+            <div class="kpi-sub">Unique run IDs in recent telemetry</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-glow" style="background:{risk_color};"></div>
+            <div class="kpi-label">Risk Score (CRS)</div>
+            <div class="kpi-value" style="color:{risk_color};">{avg_crs:.3f}</div>
+            <div class="kpi-sub">PADE blended anomaly severity</div>
+          </div>
+          <div class="kpi-card {pulse_class}">
+            <div class="kpi-glow" style="background:#FF3B3B;"></div>
+            <div class="kpi-label">Anomaly Alerts</div>
+            <div class="kpi-value" style="color:#FF3B3B;">{active_alerts}</div>
+            <div class="kpi-sub">WARN, AUTO_OPTIMISE, and BLOCK events</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_chart, col_alerts = st.columns([2.1, 1.2])
+    with col_chart:
+        st.markdown('<div class="section-label">Real-Time Cost Signal</div>', unsafe_allow_html=True)
+        fig = go.Figure()
+        if not df.empty and "created_at" in df.columns and "billed_cost" in df.columns:
+            trend = (
+                df.dropna(subset=["created_at"])
+                .set_index("created_at")
+                .resample("1h")["billed_cost"]
+                .sum()
+                .reset_index()
+                .tail(36)
+            )
+            x_vals = trend["created_at"]
+            y_vals = trend["billed_cost"]
+        else:
+            now = pd.Timestamp.utcnow().floor("h")
+            x_vals = pd.date_range(end=now, periods=36, freq="h")
+            y_vals = pd.Series(range(36)).apply(lambda idx: 0.02 + (idx % 7) * 0.004).astype(float)
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                mode="lines+markers",
+                line=dict(color="#00E5FF", width=3),
+                marker=dict(color="#7C4DFF", size=6),
+                fill="tozeroy",
+                fillcolor="rgba(0, 229, 255, 0.12)",
+                hovertemplate="<b>%{x}</b><br>Cost: $%{y:.4f}<extra></extra>",
+            )
+        )
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(9,14,27,0.65)",
+            height=320,
+            margin=dict(l=10, r=10, t=10, b=8),
+            xaxis=dict(gridcolor="rgba(0,229,255,0.12)", color="#93A4C9"),
+            yaxis=dict(gridcolor="rgba(124,77,255,0.14)", color="#93A4C9", tickprefix="$"),
+            font=dict(color="#D9EEFF"),
+            showlegend=False,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    with col_alerts:
+        st.markdown('<div class="section-label">Anomaly Pulse</div>', unsafe_allow_html=True)
+        if not df.empty and "pade_decision" in df.columns:
+            alert_df = df[df["pade_decision"].isin(risk_decisions)]
+            if "created_at" in alert_df.columns:
+                alert_df = alert_df.sort_values("created_at", ascending=False)
+            alert_df = alert_df.head(6)
+            tone = {"WARN": "#FFD54F", "AUTO_OPTIMISE": "#7C4DFF", "BLOCK": "#FF3B3B"}
+            for _, row in alert_df.iterrows():
+                decision = str(row.get("pade_decision", "ALLOW"))
+                color = tone.get(decision, "#00E5FF")
+                pulse = "pulse-alert" if decision == "BLOCK" else ""
+                st.markdown(
+                    f"""
+                    <div class="kpi-card {pulse}" style="padding:0.72rem 0.86rem;margin-bottom:0.6rem;">
+                      <div class="kpi-label">{decision}</div>
+                      <div style="font-family:'Rajdhani',sans-serif;font-size:1rem;color:#fff;">
+                        {row.get("stage_name", "unknown_stage")} :: CRS {float(row.get("crs_score", 0)):.3f}
+                      </div>
+                      <div style="color:{color};font-size:0.78rem;">Cost ${float(row.get("billed_cost", 0)):.4f}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info("No live anomalies yet. Run ingestion to activate the pulse feed.")
+
+    st.markdown('<div class="section-label">Mission Modules</div>', unsafe_allow_html=True)
+    q1, q2, q3 = st.columns(3)
+    with q1:
+        st.markdown(
+            """
+            <div class="kpi-card">
+              <div class="kpi-label">Pipeline Monitor</div>
+              <div class="kpi-value" style="font-size:1rem;">Neon stage graph, cost lanes, and risk state tracking.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with q2:
+        st.markdown(
+            """
+            <div class="kpi-card">
+              <div class="kpi-label">JARVIS Assistant</div>
+              <div class="kpi-value" style="font-size:1rem;">Conversational SQL intelligence with live streaming output.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with q3:
+        st.markdown(
+            """
+            <div class="kpi-card">
+              <div class="kpi-label">Policy Engine</div>
+              <div class="kpi-value" style="font-size:1rem;">Interactive ALLOW/WARN/BLOCK governance controls.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ── Main entrypoint ───────────────────────────────────────────────────────────

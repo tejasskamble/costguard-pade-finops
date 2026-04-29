@@ -4,6 +4,7 @@ import time
 import requests as _req
 import streamlit as st
 
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import (
     get_api_http_base_url,
     get_pade_status,
@@ -16,33 +17,17 @@ if not is_authenticated():
     st.stop()
 
 log_page_visit('12_system')
+apply_cinematic_ui("12_system")
 
 API_BASE_HTTP = get_api_http_base_url()
 
 st.markdown(
-    """
-<style>
-.cg-page-header{background:linear-gradient(135deg,rgba(255,107,53,.08) 0%,rgba(44,62,122,.06) 100%);
-  border:1px solid rgba(255,107,53,.15);border-radius:16px;padding:24px 28px;margin-bottom:24px;}
-.cg-page-header h1{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:#fff;margin:0;}
-.cg-page-header p{color:#6B7A99;margin:6px 0 0;}
-.health-card{background:#0D1B2E;border:1px solid rgba(255,107,53,.15);border-radius:14px;
-  padding:20px 22px;text-align:center;}
-.health-ok{border-color:rgba(0,212,170,.3);}
-.health-warn{border-color:rgba(255,149,0,.3);}
-.health-err{border-color:rgba(255,59,92,.3);}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    """
-<div class="cg-page-header">
-  <h1>System Health and About</h1>
-  <p>Real-time backend health, model readiness, governance status, and platform metadata for CostGuard v17.0.</p>
-</div>
-""",
+    cinematic_header(
+        "System Health Matrix",
+        "Real-time backend health, model readiness, governance status, and platform metadata.",
+        icon="SYSTEM",
+        status="Ops Core Nominal",
+    ),
     unsafe_allow_html=True,
 )
 

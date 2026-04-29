@@ -4,6 +4,7 @@ import time
 import pandas as pd
 import streamlit as st
 
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import (
     get_baseline_report,
     get_training_history,
@@ -18,27 +19,15 @@ if not is_authenticated():
     st.stop()
 
 log_page_visit('05_ml_training')
+apply_cinematic_ui("05_ml_training")
 
 st.markdown(
-    """
-<style>
-.cg-page-header{background:linear-gradient(135deg,rgba(255,107,53,.08) 0%,rgba(44,62,122,.06) 100%);
-  border:1px solid rgba(255,107,53,.15);border-radius:16px;padding:24px 28px;margin-bottom:24px;}
-.cg-page-header h1{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:#fff;margin:0;}
-.cg-page-header p{color:#6B7A99;margin:6px 0 0;}
-.job-card{background:#0D1B2E;border:1px solid rgba(255,107,53,.15);border-radius:12px;padding:16px 20px;margin:8px 0;}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    """
-<div class="cg-page-header">
-  <h1>ML Training Lab</h1>
-  <p>Train the canonical CostGuard v17.0 PADE stack for the 3-domain IEEE workflow: Synthetic -> TravisTorrent -> BitBrains.</p>
-</div>
-""",
+    cinematic_header(
+        "ML Training Lab",
+        "Train the canonical PADE stack across Synthetic, TravisTorrent, and BitBrains domains.",
+        icon="ML",
+        status="Training Cluster Ready",
+    ),
     unsafe_allow_html=True,
 )
 

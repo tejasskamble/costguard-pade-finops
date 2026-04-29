@@ -11,9 +11,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from components.cinematic_ui import apply_cinematic_ui, cinematic_header
 from utils.api_client import (
     get_recent_alerts, simulate_pipeline, get_dag, remediate, get_api_http_base_url
 )
+
+apply_cinematic_ui("02_anomaly_alerts")
 
 PLOTLY_LAYOUT = dict(
     plot_bgcolor  = "#0C1428",
@@ -177,6 +180,27 @@ def render_dag_explorer(run_id: str = None) -> None:
         showlegend=False,
     ))
 
+    # Simulated flow packets along each edge for a live-topology feel.
+    flow_phase = time.time() % 1.0
+    flow_x, flow_y = [], []
+    for e in edges:
+        src = e.get("src") or e.get("source")
+        dst = e.get("dst") or e.get("target")
+        if src not in NODE_POSITIONS or dst not in NODE_POSITIONS:
+            continue
+        x0, y0 = NODE_POSITIONS[src]
+        x1, y1 = NODE_POSITIONS[dst]
+        flow_x.append(x0 + (x1 - x0) * flow_phase)
+        flow_y.append(y0 + (y1 - y0) * flow_phase)
+    fig.add_trace(go.Scatter(
+        x=flow_x,
+        y=flow_y,
+        mode="markers",
+        marker=dict(size=8, color="#00E5FF", opacity=0.85),
+        hoverinfo="skip",
+        name="Flow",
+    ))
+
     # Node sizes scaled to billed_cost
     max_cost  = max((n.get("billed_cost", 0.01) for n in nodes), default=0.04)
     node_sizes = [
@@ -277,12 +301,15 @@ def render_alert_card(alert: dict) -> str:
 
 # ── Main page ─────────────────────────────────────────────────────────────────
 def show():
-    st.markdown("""
-    <div class="page-header">
-        <h1>🚨 Live Anomaly Detection</h1>
-        <p>Real-time CRS scores, AI recommendations, pipeline DAG explorer, and one-click YAML fixes.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        cinematic_header(
+            "Live Pipeline Visualizer",
+            "Real-time CRS scores, AI recommendations, DAG topology, and one-click remediation exports.",
+            icon="PIPELINE",
+            status="Telemetry Stream Active",
+        ),
+        unsafe_allow_html=True,
+    )
 
     # ── Tabs: Alerts | DAG Explorer | Live Feed ───────────────────────────────
     tab_alerts, tab_dag, tab_feed = st.tabs(
